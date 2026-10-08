@@ -1,0 +1,23 @@
+name: Bug report
+description: Report reproducible source or local-runtime behavior.
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Include expected behavior and reproduction steps. Do not upload licensed assets or project secrets.
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Environment
+      placeholder: OS, Node version, MZ version, service version, browser
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized errors
+      description: Remove usernames, paths, tokens and project data first.
+      render: text

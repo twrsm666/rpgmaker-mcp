@@ -1,10 +1,15 @@
 {
   "name": "rpgmaker-mcp",
-  "version": "0.4.2",
-  "description": "MCP server for inspecting and editing RPG Maker MZ projects, with engine-faithful map rendering",
-  "type": "module",
+  "version": "0.5.0",
+  "private": true,
+  "description": "MCP server that lets an AI agent see and edit an RPG Maker MZ project: engine-faithful map rendering, 78 tools, step-by-step visual editing, event-command builders and real playtesting in a browser or native NW.js",
   "license": "MIT",
   "author": "twrsm666",
+  "type": "module",
+  "main": "src/server.js",
+  "bin": {
+    "rpgmaker-mcp": "src/server.js"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/twrsm666/rpgmaker-mcp.git"
@@ -13,62 +18,51 @@
   "bugs": {
     "url": "https://github.com/twrsm666/rpgmaker-mcp/issues"
   },
-  "bin": {
-    "rpgmaker-mcp": "dist/index.js"
-  },
-  "main": "dist/index.js",
-  "scripts": {
-    "build": "tsc",
-    "extract:commands": "node scripts/extract-commands.mjs",
-    "start": "node dist/index.js",
-    "selftest": "node dist/selftest.js",
-    "fix-project": "node scripts/fix-project.mjs",
-    "census": "node scripts/census.mjs",
-    "e2e": "node scripts/e2e-run.mjs",
-    "e2e:live": "node dist/live-e2e.js",
-    "verify:input": "node scripts/verify-input.mjs",
-    "verify:newdata": "node scripts/verify-newdata.mjs",
-    "roundtrip": "node dist/roundtrip.js",
-    "fidelity:sweep": "node dist/sweep.js",
-    "session:e2e": "node scripts/session-tool.mjs",
-    "verify:full": "node scripts/verify-full.mjs",
-    "verify:package": "node scripts/verify-package.mjs",
-    "build:game": "node scripts/build-lightrun.mjs build",
-    "verify:game": "node scripts/build-lightrun.mjs verify",
-    "play:game": "node scripts/play-lightrun.mjs",
-    "build:star-relay": "node scripts/build-star-relay.mjs build",
-    "play:star-relay": "node scripts/verify-star-relay.mjs",
-    "smoke:chain": "node scripts/smoke-registered.mjs"
-  },
-  "files": [
-    "dist",
-    "plugin/RMMZLiveBridge.js",
-    "scripts",
-    "assets",
-    "LICENSE",
-    "README.md",
-    "ACCEPTANCE.md",
-    "CHANGELOG.md",
-    "REVIEW-RESPONSE.md",
-    "RELEASING.md"
-  ],
   "keywords": [
     "mcp",
+    "model-context-protocol",
     "rpg-maker",
     "rpg-maker-mz",
+    "tilemap",
+    "visual-editor",
     "game-development",
-    "model-context-protocol"
+    "ai-agent"
   ],
   "engines": {
     "node": ">=20"
   },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.31.0",
-    "@napi-rs/canvas": "^1.0.10",
-    "zod": "^4.6.5"
+  "files": [
+    "src",
+    "bin",
+    "plugin",
+    "preview",
+    "docs",
+    "examples",
+    "assets",
+    "LICENSE",
+    "README.md",
+    "README.zh-CN.md",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "scripts": {
+    "start": "node src/server.js",
+    "preview": "node src/server.js --preview-only",
+    "demo": "node bin/create-demo.js",
+    "test": "node --test test/*.test.js",
+    "check": "node bin/check-source.js",
+    "audit:release": "node bin/audit-release.js",
+    "verify": "node bin/verify.js",
+    "verify:runtime": "node bin/verify-browser-runtime.js",
+    "verify:nw": "node bin/verify-runtime.js",
+    "verify:ui": "node bin/verify-ui.js",
+    "verify:steps": "node bin/verify-steps.js",
+    "native:prepare": "node bin/prepare-native-runtime.js"
   },
-  "devDependencies": {
-    "@types/node": "^24.0.0",
-    "typescript": "^7.0.0"
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "playwright-core": "1.63.0",
+    "zod": "4.6.5"
   }
 }

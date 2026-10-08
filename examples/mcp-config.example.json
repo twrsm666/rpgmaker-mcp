@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "rpg-maker-mz": {
+      "command": "node",
+      "args": [
+        "/absolute/path/to/rpgmaker-mcp/src/server.js",
+        "--project",
+        "/absolute/path/to/your-mz-project",
+        "--engine",
+        "/absolute/path/to/your/RPG Maker MZ",
+        "--live-bridge"
+      ]
+    }
+  }
+}

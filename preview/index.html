@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MZ · 地图观察台</title><link rel="stylesheet" href="/style.css"></head>
+<body>
+<header><div><span class="eyebrow">RPG MAKER MZ / VISUAL MCP</span><h1>地图观察台</h1></div><div class="view-actions"><button id="design-view" type="button">地图设计</button><button id="play-view" type="button">进入试玩</button></div><div id="connection" role="status">连接中</div></header>
+<section id="play-panel" hidden><div class="play-hint">真实 MZ 游戏 · 点击游戏画面后操作：方向键移动，Enter / Z 确认，Esc / X 返回。到茶馆门前按确认进入；右侧守院人可触发战斗。</div><iframe id="game-frame" title="真实 MZ 试玩" allow="autoplay"></iframe></section>
+<main id="design-panel">
+  <aside>
+    <h2 id="project-title">本地项目</h2>
+    <label for="maps">地图</label><select id="maps"></select>
+    <div class="controls"><label for="zoom">缩放</label><select id="zoom"><option value="fit" selected>适应面板</option><option value=".5">50%</option><option value=".75">75%</option><option value="1">100%</option><option value="1.5">150%</option><option value="2">200%</option></select></div>
+    <div class="checks"><label><input type="checkbox" id="grid">坐标网格</label><label><input type="checkbox" id="events" checked>事件图像</label><label><input type="checkbox" id="markers" checked>事件标记</label><label><input type="checkbox" id="regions">区域层</label></div>
+    <button type="button" id="refresh">重新读取</button>
+    <h3>素材索引</h3><label for="sheet">瓦片页</label>
+    <select id="sheet"><option>A1</option><option selected>A2</option><option>A3</option><option>A4</option><option>A5</option><option>B</option><option>C</option><option>D</option><option>E</option></select>
+    <p class="hint">点击地图查看六层瓦片和事件。点击素材查看 tile ID。MCP 修改后这里会自动刷新。</p>
+    <p class="hint warning">原生 MZ 编辑器不共享内存：写入前保存并关闭项目，完成后重新打开。预览不执行项目插件或事件逻辑。</p>
+  </aside>
+  <section class="workspace">
+    <div class="bar"><span id="map-label">地图</span><span id="revision"></span></div>
+    <div class="step-toolbar">
+      <button id="pause-steps" type="button">暂停</button><button id="next-step" type="button">下一步</button><button id="replay-steps" type="button">重播本轮</button>
+      <label for="step-speed">每步停留<select id="step-speed"><option value="server">按工具设置</option><option value="0">立即</option><option value="150">150ms</option><option value="400">400ms</option><option value="800">800ms</option></select></label>
+      <span id="step-count" aria-live="polite">尚无编辑步骤</span>
+    </div>
+    <div id="current-step" role="status">每次提交一格，依次绘制；暂停或单步不会丢弃后续步骤。</div>
+    <div class="canvas-wrap" id="map-wrap"><canvas id="map" aria-label="可选择格子的地图"></canvas></div>
+    <div id="error" role="alert"></div>
+    <div class="palette-wrap"><canvas id="palette" aria-label="带 tile ID 的瓦片索引"></canvas></div>
+  </section>
+  <aside class="inspector"><h2>格子检查</h2><div id="selection">点击地图选择格子</div><pre id="detail"></pre><h3>编辑步骤</h3><ol id="edit-log"></ol><h3>事件</h3><div id="event-list"></div></aside>
+</main>
+<footer id="status" role="status"></footer>
+<script type="module" src="/app.js"></script>
+</body></html>
