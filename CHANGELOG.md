@@ -13,6 +13,45 @@ response are preserved verbatim under
 [`docs/legacy-0.4.2/`](docs/legacy-0.4.2/), and the old code stays reachable in
 git history at tag `v0.4.2`.
 
+## 0.5.1 — 2026-10-10
+
+### Fixed — map size is no longer capped at 256x256
+
+- Every coordinate and dimension schema silently capped maps at 256x256 and
+  coordinates at 0..255 (`xy`, `regionSchema`, `create_map`, `configure_map`,
+  `place_building`, `paint_tiles`, `upsert_event`, the editor session tools and
+  the `201`/`203` event builders). All static ceilings are removed; bounds are
+  now checked against each map's own width/height, plus one real limit that no
+  JavaScript runtime can lift: `width*height*6` must stay within array capacity.
+- `render_map` used to fail with `Render too large` once a region exceeded a
+  16M-pixel canvas. Tiles are now composited through a bounded scratch canvas
+  in 2048px blocks, and a request that would exceed the 2D-canvas budget is
+  **auto-fitted with a warning** in the returned metadata instead of erroring,
+  so every map size renders. Large renders also get a realistic 300 s capture
+  budget instead of 20 s, which would have re-introduced the size limit as a
+  timeout.
+- The observer panel gained a real camera: the canvas stays viewport-sized and
+  only visible cells are drawn, so browsing is instant at any map size.
+  - Mouse wheel zooms continuously (exponential factor, cursor-anchored, 1%..3200%);
+    the old fixed-preset dropdown is gone.
+  - Left-button drag pans the map; a click (no drag) still selects the cell.
+  - `全屏地图` enters an immersive full-page map view that hides every panel;
+    Esc or the floating button leaves it.
+  - During a drag or wheel burst the last frame is re-blitted with the camera
+    delta (snapshot + transform) instead of re-rendering tiles, so motion is
+    smooth even on huge maps; a true render runs only after the gesture settles.
+  - A `分块渲染 / 整体渲染` switch picks the strategy: chunked viewport passes
+    (default, any map size) or a one-shot whole-map bitmap whose pan/zoom are
+    pure blits with zero tile redraws — steps patch only their changed region
+    into the bitmap, and a bitmap that would exceed the canvas budget is
+    auto-fitted with a warning. The choice persists in localStorage.
+- `bin/verify-ui.js` was rewritten for the camera UI and now asserts the wheel
+  zoom anchor, drag panning and immersive mode; `bin/verify-large-map.js` is a
+  new positive control that creates, paints, events and renders a 300x280 map
+  end to end (`npm run verify:large`); `bin/verify-render-modes.js` verifies
+  the strategy switch, its blit-only gestures and bitmap patching
+  (`npm run verify:render-modes`).
+
 ## 0.5.0 — 2026-10-08
 
 - The published implementation is now the visual line: plain ES modules, no build

@@ -55,6 +55,29 @@ function activePage(event, state = {}) {
       (!c.actorValid || (state.actors || []).includes(c.actorId)) && (!c.itemValid || (state.items || []).includes(c.itemId));
   });
 }
+// One _addSpot pass writes into both planes (the engine routes star tiles to
+// the upper layer), so the lower and upper planes are collected in separate
+// passes to keep event sprites between them. _addSpot resolves map cells from
+// its own start arguments, so a block is addressed by shifting the start,
+// never the destination. Compositing through a small scratch canvas keeps the
+// intermediate bitmaps bounded no matter how large the map is.
+const BLOCK_PX = 2048;
+const sink = { addRect() {} };
+function renderTiles(tm, images, ctx, region, size, upper) {
+  const cells = Math.max(1, Math.floor(BLOCK_PX / size));
+  const cols = Math.min(region.width, cells), rows = Math.min(region.height, cells);
+  const scratch = document.createElement("canvas");
+  const sctx = context(scratch, cols * size, rows * size);
+  const paint = layer(sctx, images);
+  for (let by = 0; by < region.height; by += rows) for (let bx = 0; bx < region.width; bx += cols) {
+    const w = Math.min(cols, region.width - bx) * size, h = Math.min(rows, region.height - by) * size;
+    sctx.clearRect(0, 0, scratch.width, scratch.height);
+    tm._lowerLayer = upper ? sink : paint;
+    tm._upperLayer = upper ? paint : sink;
+    for (let y = 0; y < h / size; y++) for (let x = 0; x < w / size; x++) tm._addSpot(region.x + bx, region.y + by, x, y);
+    ctx.drawImage(scratch, 0, 0, w, h, bx * size, by * size, w, h);
+  }
+}
 export async function drawMap(canvas, bundle, token, options = {}) {
   const { map, tileSize: size } = bundle;
   const region = options.region || { x: 0, y: 0, width: map.width, height: map.height };
@@ -62,17 +85,29 @@ export async function drawMap(canvas, bundle, token, options = {}) {
   if (region.x < 0 || region.y < 0 || region.width < 1 || region.height < 1 ||
       region.x + region.width > map.width || region.y + region.height > map.height) throw new Error("Region outside map");
   const width = region.width * size, height = region.height * size;
-  if (width * height > 16_777_216) throw new Error("Render too large; use a cropped region");
-  const images = await bitmaps(bundle, token);
-  const lowerCanvas = document.createElement("canvas"), upperCanvas = document.createElement("canvas");
-  const lower = context(lowerCanvas, width, height), upper = context(upperCanvas, width, height);
-  const tm = renderer(bundle, images, layer(lower, images), layer(upper, images), options.animationFrame || 0);
-  for (let y = 0; y < region.height; y++) for (let x = 0; x < region.width; x++) tm._addSpot(region.x, region.y, x, y);
-  const scale = Math.max(.1, Math.min(4, options.scale || 1));
-  const outputWidth = Math.ceil(width * scale), outputHeight = Math.ceil(height * scale);
-  if (outputWidth * outputHeight > 16_777_216 || outputWidth > 8192 || outputHeight > 8192) throw new Error("Scaled render too large; crop or reduce scale");
+  const warnings = [];
+  let scale = Math.max(.1, Math.min(4, options.scale || 1));
+  const view = options.view || null;
+  if (!view) {
+    // 16384 per side is the hard 2D-canvas ceiling in Chromium; instead of
+    // failing, fit the requested scale to the budget and say so. Maps of any
+    // size therefore always render; the browser observer never hits this path
+    // because it renders viewport-sized.
+    const side = Math.max(width, height) * scale;
+    if (side > 16384 || width * height * scale * scale > 16_777_216) {
+      const fitted = Math.min(16384 / Math.max(width, height), Math.sqrt(16_777_216 / (width * height)));
+      warnings.push(`scale ${scale} needs ${Math.ceil(side)}px, above the canvas budget; fitted to scale ${fitted.toFixed(3)}`);
+      scale = fitted;
+    }
+  }
+  const outputWidth = view ? view.width : Math.ceil(width * scale);
+  const outputHeight = view ? view.height : Math.ceil(height * scale);
   const ctx = context(canvas, outputWidth, outputHeight);
-  ctx.scale(scale, scale);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = view ? "#0c1218" : "#192129";
+  ctx.fillRect(0, 0, outputWidth, outputHeight);
+  if (view) ctx.setTransform(scale, 0, 0, scale, view.offsetX, view.offsetY);
+  else ctx.scale(scale, scale);
   ctx.fillStyle = "#192129"; ctx.fillRect(0, 0, width, height);
   if (map.parallaxName) {
     const background = await image(`img/parallaxes/${map.parallaxName}.png`, token);
@@ -83,9 +118,10 @@ export async function drawMap(canvas, bundle, token, options = {}) {
       ctx.fillStyle = pattern; ctx.fillRect(0, 0, width, height);
     }
   }
-  ctx.drawImage(lowerCanvas, 0, 0);
+  const images = await bitmaps(bundle, token);
+  const tm = renderer(bundle, images, sink, sink, options.animationFrame || 0);
+  renderTiles(tm, images, ctx, region, size, false);
   const sprites = [];
-  const warnings = [];
   if (options.events !== false) for (const event of map.events.filter(Boolean)) {
     const page = activePage(event, options.state);
     if (!page) continue;
@@ -112,7 +148,7 @@ export async function drawMap(canvas, bundle, token, options = {}) {
   }
   sprites.sort((a, b) => a.priority - b.priority || a.event.y - b.event.y || a.event.id - b.event.id);
   for (const sprite of sprites.filter(s => s.priority < 2)) sprite.draw();
-  ctx.drawImage(upperCanvas, 0, 0);
+  renderTiles(tm, images, ctx, region, size, true);
   for (const sprite of sprites.filter(s => s.priority === 2)) sprite.draw();
   if (options.regions) for (let y = 0; y < region.height; y++) for (let x = 0; x < region.width; x++) {
     const id = map.data[(5 * map.height + y + region.y) * map.width + x + region.x];
@@ -137,6 +173,131 @@ export async function drawMap(canvas, bundle, token, options = {}) {
   }
   return { mapId: bundle.mapId, revision: bundle.revision, region, scale, pixelWidth: canvas.width, pixelHeight: canvas.height,
     warnings, note: "Design preview: stock MZ tiles/parallax/condition-selected event sprites; plugins, effects, and event logic are not executed." };
+}
+// Terrain-only and event-only draws for the observer's chunked viewport passes.
+// The observer canvas is viewport-sized and addressed in world pixels through
+// `view` (setTransform scale/offset), so a map of any size is painted as many
+// small region draws instead of one giant bitmap. Events are drawn between the
+// two plane sweeps, which is what keeps sprites stacked between the lower and
+// upper tile planes without a second full-canvas pass.
+export async function drawTerrain(canvas, bundle, token, options = {}) {
+  const { map, tileSize: size } = bundle;
+  const region = options.region || { x: 0, y: 0, width: map.width, height: map.height };
+  for (const key of ["x", "y", "width", "height"]) if (!Number.isInteger(region[key])) throw new Error("Region requires integer coordinates");
+  if (region.x < 0 || region.y < 0 || region.width < 1 || region.height < 1 ||
+      region.x + region.width > map.width || region.y + region.height > map.height) throw new Error("Region outside map");
+  const width = region.width * size, height = region.height * size;
+  const view = options.view || null;
+  const warnings = [];
+  const ctx = canvas.getContext("2d");
+  let scale;
+  if (view) {
+    scale = view.scale;
+    ctx.setTransform(scale, 0, 0, scale, view.offsetX, view.offsetY);
+    // Heavy minification aliases into noise with nearest-neighbour, while
+    // pixel-art upscale must stay crisp, so smoothing follows scale direction.
+    // Whole-mode bitmap patches force smoothing off to match drawMap output.
+    ctx.imageSmoothingEnabled = options.smoothing ?? scale < 1;
+    if (options.background !== false) { ctx.fillStyle = "#192129"; ctx.fillRect(0, 0, width, height); }
+    // Chunked viewport passes do not tile parallax patterns; maps that need a
+    // parallax preview use the full-canvas drawMap path.
+  } else {
+    scale = Math.max(.1, Math.min(4, options.scale || 1));
+    const side = Math.max(width, height) * scale;
+    if (side > 16384 || width * height * scale * scale > 16_777_216) {
+      const fitted = Math.min(16384 / Math.max(width, height), Math.sqrt(16_777_216 / (width * height)));
+      warnings.push(`scale ${scale} needs ${Math.ceil(side)}px, above the canvas budget; fitted to scale ${fitted.toFixed(3)}`);
+      scale = fitted;
+    }
+    canvas.width = Math.ceil(width * scale); canvas.height = Math.ceil(height * scale);
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = "#192129"; ctx.fillRect(0, 0, width, height);
+  }
+  const images = await bitmaps(bundle, token);
+  const tm = renderer(bundle, images, sink, sink, options.animationFrame || 0);
+  const plane = options.plane || "both";
+  if (plane !== "upper") renderTiles(tm, images, ctx, region, size, false);
+  if (plane !== "lower") renderTiles(tm, images, ctx, region, size, true);
+  return { region, scale, warnings };
+}
+export async function drawEvents(ctx, bundle, token, options = {}) {
+  const { map, tileSize: size } = bundle;
+  const view = options.view;
+  if (!view) throw new Error("drawEvents requires a view transform");
+  const warnings = [];
+  const images = await bitmaps(bundle, token);
+  const tm = renderer(bundle, images, sink, sink, options.animationFrame || 0);
+  ctx.setTransform(view.scale, 0, 0, view.scale, view.offsetX, view.offsetY);
+  ctx.imageSmoothingEnabled = view.scale < 1;
+  const cull = options.cull || null;
+  const skirt = size * 2;
+  const sprites = [];
+  if (options.events !== false) for (const event of map.events.filter(Boolean)) {
+    const page = activePage(event, options.state);
+    if (!page) continue;
+    const px = event.x * size, py = event.y * size;
+    if (cull && (px < cull.x - skirt || py < cull.y - skirt ||
+        px > cull.x + cull.width + skirt || py > cull.y + cull.height + skirt)) continue;
+    let img = null;
+    if (page.image.characterName) {
+      try { img = await image(`img/characters/${page.image.characterName}.png`, token); }
+      catch (error) { warnings.push(error.message); }
+    }
+    sprites.push({ event, page, img, px, py, priority: page.priorityType });
+  }
+  sprites.sort((a, b) => a.priority - b.priority || a.event.y - b.event.y || a.event.id - b.event.id);
+  const group = options.priority === "above" ? s => s.priority === 2 : s => s.priority < 2;
+  for (const sprite of sprites.filter(group)) {
+    const { page, px, py } = sprite;
+    if (page.image.tileId) tm._addTile(layer(ctx, images), page.image.tileId, px, py);
+    else if (page.image.characterName && sprite.img) {
+      const img = sprite.img;
+      const big = page.image.characterName.includes("$"), obj = page.image.characterName.includes("!");
+      const pw = img.width / (big ? 3 : 12), ph = img.height / (big ? 4 : 8);
+      const col = (big ? 0 : page.image.characterIndex % 4 * 3) + page.image.pattern;
+      const row = (big ? 0 : Math.floor(page.image.characterIndex / 4) * 4) + (page.image.direction - 2) / 2;
+      ctx.drawImage(img, col * pw, row * ph, pw, ph, px + (size - pw) / 2, py + size - ph - (obj ? 0 : 6), pw, ph);
+    }
+  }
+  return { warnings };
+}
+// Whole-mode incremental patch: repaint one region of a full-map bitmap in the
+// engine's stacking order (clear → lower → below-events → upper → above).
+// Events are culled on the region expanded by two cells so tall sprites
+// anchored just below the patch still paint their tops into it. Maps with a
+// parallax cannot be patched (the pattern is not re-tiled here) — rebuild.
+export async function paintRegion(bitmap, bundle, token, region, options = {}) {
+  const { map, tileSize: size } = bundle;
+  for (const key of ["x", "y", "width", "height"]) if (!Number.isInteger(region[key])) throw new Error("Region requires integer coordinates");
+  if (region.x < 0 || region.y < 0 || region.width < 1 || region.height < 1 ||
+      region.x + region.width > map.width || region.y + region.height > map.height) throw new Error("Region outside map");
+  const scale = options.scale || 1;
+  const warnings = [];
+  const ctx = bitmap.getContext("2d");
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(region.x * size * scale, region.y * size * scale, region.width * size * scale, region.height * size * scale);
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  ctx.fillStyle = "#192129";
+  ctx.fillRect(region.x * size, region.y * size, region.width * size, region.height * size);
+  const images = await bitmaps(bundle, token);
+  const tm = renderer(bundle, images, sink, sink, options.animationFrame || 0);
+  const cull = { x: region.x - 2, y: region.y - 2, width: region.width + 4, height: region.height + 4 };
+  const view = { width: bitmap.width, height: bitmap.height, scale, offsetX: 0, offsetY: 0 };
+  ctx.save();
+  ctx.translate(region.x * size, region.y * size);
+  renderTiles(tm, images, ctx, region, size, false);
+  ctx.restore();
+  if (options.events !== false)
+    warnings.push(...(await drawEvents(ctx, bundle, token, { view, cull, priority: "below" })).warnings);
+  ctx.save();
+  ctx.translate(region.x * size, region.y * size);
+  renderTiles(tm, images, ctx, region, size, true);
+  ctx.restore();
+  if (options.events !== false)
+    warnings.push(...(await drawEvents(ctx, bundle, token, { view, cull, priority: "above" })).warnings);
+  return { warnings };
 }
 export async function drawPalette(canvas, bundle, token, options = {}) {
   const { Tilemap: T } = { Tilemap };

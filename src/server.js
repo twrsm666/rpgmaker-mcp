@@ -18,8 +18,11 @@ import { registerEventTools } from "./event-commands.js";
 
 const mapIdSchema = z.number().int().min(1).max(999);
 const directionSchema = z.union([2, 4, 6, 8].map(value => z.literal(value)));
-const xy = z.object({ x: z.number().int().min(0).max(255), y: z.number().int().min(0).max(255) });
-const regionSchema = xy.extend({ width: z.number().int().min(1).max(256), height: z.number().int().min(1).max(256) });
+// No static ceiling on coordinates or map size: every bound is checked against
+// the live map's own width/height (Project.point) or the renderer's region test.
+// A fixed 255 here silently capped every map at 256x256.
+const xy = z.object({ x: z.number().int().min(0), y: z.number().int().min(0) });
+const regionSchema = xy.extend({ width: z.number().int().min(1), height: z.number().int().min(1) });
 const imageSchema = z.object({ characterName: z.string().max(128).optional(), characterIndex: z.number().int().min(0).max(7).optional(),
   direction: directionSchema.optional(), pattern: z.number().int().min(0).max(2).optional(), tileId: z.number().int().min(0).max(1023).optional() });
 const editSchema = { mapId: mapIdSchema, expectedRevision: z.string().regex(/^[a-f0-9]{64}$/),
@@ -61,7 +64,7 @@ export async function createService({ projectPath, enginePath, port = 0, browser
   const capture = new Capture(preview, browserPath);
   const playtest = runtime ? new Playtest(preview, runtime, browserPath) : null;
   const nativePlaytest = runtime ? new NativePlaytest(project, runtime) : null;
-  const server = new McpServer({ name: "rpg-maker-mz-visual", version: "0.4.0" }, {
+  const server = new McpServer({ name: "rpg-maker-mz-visual", version: "0.5.1" }, {
     instructions: "Visual map iteration: project_info → list_maps → render_map and tile_palette → inspect_cell → edits with expectedRevision → examine returned image. Coordinates zero-based. Four tile layers 0..3, shadow 4, region 5. Close native MZ project before MCP writes; reopen afterward. Never infer a tile's appearance from its number; use tile_palette. Every edit backs up and checks revision. Design rendering uses stock MZ; custom plugins are not executed. Preview HTTP has no write API. Event logic: create the event with upsert_event/put_event, then append behavior with event_show_text, event_show_choices, event_input_number, event_battle, event_give_items, event_give_gold, event_switches, event_self_switch, event_variables, event_if, event_move_route, event_play_se, event_transfer_player, event_wait, event_change_party, event_change_actor_hp, event_change_actor_mp, event_change_actor_level, event_change_actor_state, event_recover_all, event_change_actor_skill, event_change_actor_images, event_change_enemy_hp, event_enemy_appear, event_enemy_transform, event_screen_fade, event_tint_screen, event_flash_screen, event_shake_screen, event_set_weather, event_show_animation, event_set_event_location, event_show_picture, event_move_picture, event_erase_picture, event_comment, event_exit_event, event_erase_event, event_call_common_event, event_label, event_jump_to_label, event_name_input, event_shop, event_control_timer and event_change_access; chain several for complex flows and fall back to event_raw_commands for anything else. Close an open editor session before calling event_* tools, or refresh the revision."
   });
   // Unknown keys used to be stripped silently, so a typo'd or unsupported argument
@@ -76,10 +79,12 @@ export async function createService({ projectPath, enginePath, port = 0, browser
     catch (error) { return { isError: true, content: [{ type: "text", text: describeError(error) }] }; }
   });
   registerEditorTools({ project, preview, register, textResult });
+  // Any map fits the overview budget: the renderer auto-scales with a warning
+  // instead of failing, so this is a default, never a ceiling.
   const fitScale = async id => {
     const { map } = await project.read(id);
     const { tileSize } = await project.info();
-    return Math.max(.25, Math.min(1, 1600 / (Math.max(map.width, map.height) * tileSize)));
+    return Math.min(1, 1600 / (Math.max(map.width, map.height) * tileSize));
   };
   const picture = async options => {
     const { buffer, ...meta } = await capture.render(options);
@@ -211,7 +216,7 @@ export async function createService({ projectPath, enginePath, port = 0, browser
     ...editSchema, area: regionSchema, roofTileId: z.number().int().min(0).max(8191), wallTileId: z.number().int().min(0).max(8191),
     expectedRoofSheet: z.enum(["A1", "A2", "A3", "A4", "A5", "B", "C", "D", "E"]),
     expectedWallSheet: z.enum(["A1", "A2", "A3", "A4", "A5", "B", "C", "D", "E"]),
-    roofRows: z.number().int().min(1).max(255), layer: z.number().int().min(0).max(3).default(1),
+    roofRows: z.number().int().min(1), layer: z.number().int().min(0).max(3).default(1),
     clearUpperLayers: z.boolean().default(false)
   }, async args => {
     if (tileSheet(args.roofTileId) !== args.expectedRoofSheet)

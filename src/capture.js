@@ -38,11 +38,14 @@ export class Capture {
     const page = await browser.newPage({ viewport: { width: 1600, height: 1200 }, deviceScaleFactor: 1 });
     try {
       const query = new URLSearchParams({ token: this.preview.token, spec: JSON.stringify(options) });
-      await page.goto(`${this.preview.url}/render.html?${query}`, { waitUntil: "load", timeout: 20000 });
-      await page.waitForFunction(() => window.renderDone || window.renderError, { timeout: 20000 });
+      // Maps are no longer capped at 256x256, so a whole-map render of a large
+      // project legitimately takes minutes; a 20 s budget would just rename the
+      // old size limit as a timeout.
+      await page.goto(`${this.preview.url}/render.html?${query}`, { waitUntil: "load", timeout: 300000 });
+      await page.waitForFunction(() => window.renderDone || window.renderError, { timeout: 300000 });
       const result = await page.evaluate(() => ({ error: window.renderError, meta: window.renderMeta }));
       if (result.error) throw new Error(result.error);
-      const buffer = await page.locator("#render").screenshot({ type: "png", timeout: 20000 });
+      const buffer = await page.locator("#render").screenshot({ type: "png", timeout: 300000 });
       return { buffer, ...result.meta };
     } finally { await page.close(); }
   }

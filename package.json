@@ -1,6 +1,6 @@
 {
   "name": "rpgmaker-mcp",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "description": "MCP server that lets an AI agent see and edit an RPG Maker MZ project: engine-faithful map rendering, 78 tools, step-by-step visual editing, event-command builders and real playtesting in a browser or native NW.js",
   "license": "MIT",
@@ -54,6 +54,8 @@
     "check": "node bin/check-source.js",
     "audit:release": "node bin/audit-release.js",
     "verify": "node bin/verify.js",
+    "verify:large": "node bin/verify-large-map.js",
+    "verify:render-modes": "node bin/verify-render-modes.js",
     "verify:runtime": "node bin/verify-browser-runtime.js",
     "verify:nw": "node bin/verify-runtime.js",
     "verify:ui": "node bin/verify-ui.js",

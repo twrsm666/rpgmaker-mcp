@@ -7,8 +7,9 @@ import { diffMap } from "../preview/changes.js";
 export const digest = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 const clone = value => structuredClone(value);
 export const mapFile = id => `Map${String(id).padStart(3, "0")}.json`;
-export function integer(value, label, min, max) {
-  if (!Number.isInteger(value) || value < min || value > max) throw new Error(`${label} must be integer ${min}..${max}`);
+export function integer(value, label, min, max = Number.MAX_SAFE_INTEGER) {
+  const range = max === Number.MAX_SAFE_INTEGER ? `>= ${min}` : `${min}..${max}`;
+  if (!Number.isInteger(value) || value < min || value > max) throw new Error(`${label} must be integer ${range}`);
   return value;
 }
 export function point(map, x, y) {
@@ -75,7 +76,9 @@ export class Project {
     return { map, revision: digest(bytes), filename };
   }
   validate(map) {
-    integer(map.width, "map.width", 1, 256); integer(map.height, "map.height", 1, 256);
+    integer(map.width, "map.width", 1); integer(map.height, "map.height", 1);
+    // V8 arrays hold at most 2^32-1 entries; a dense six-layer grid needs width*height*6.
+    if (map.width * map.height > 715_827_882) throw new Error("Map exceeds JavaScript array capacity (width*height*6 must stay under 2^32)");
     if (!Array.isArray(map.data) || map.data.length !== map.width * map.height * 6) throw new Error("Map must contain six complete layers");
     if (!Array.isArray(map.events)) throw new Error("Map.events must be an array");
     for (const [id, event] of map.events.entries()) {
@@ -99,7 +102,7 @@ export class Project {
   }
   async createMap({ mapId, expectedCatalogRevision, name, parentId = 0, width, height, tilesetId }) {
     if (this.readOnly) throw new Error("Server is read-only");
-    integer(mapId, "mapId", 1, 999); integer(width, "width", 1, 256); integer(height, "height", 1, 256);
+    integer(mapId, "mapId", 1, 999); integer(width, "width", 1); integer(height, "height", 1);
     return this.lock(() => this.diskLock(async () => {
       const catalogFile = await this.file("data/MapInfos.json");
       const bytes = await fs.readFile(catalogFile);
@@ -373,7 +376,7 @@ export function makeEvent({ id, name, x, y, note = "", pages, text, transfer, im
     }
     if (transfer) {
       integer(transfer.mapId, "transfer.mapId", 1, 999);
-      integer(transfer.x, "transfer.x", 0, 255); integer(transfer.y, "transfer.y", 0, 255);
+      integer(transfer.x, "transfer.x", 0); integer(transfer.y, "transfer.y", 0);
       if (![0, 2, 4, 6, 8].includes(transfer.direction ?? 2)) throw new Error("Invalid transfer direction");
       commands.push({ code: 201, indent: 0, parameters: [0, transfer.mapId, transfer.x, transfer.y, transfer.direction ?? 2, 0] });
     }

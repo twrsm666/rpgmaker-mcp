@@ -4,7 +4,7 @@ import { point, makeEvent } from "./project.js";
 
 export function registerEditorTools({ project, preview, register, textResult }) {
   const editors = new Map();
-  const coordinate = z.number().int().min(0).max(255);
+  const coordinate = z.number().int().min(0);
   const common = { editorId: z.string().uuid(), caption: z.string().max(512).optional(),
     holdMs: z.number().int().min(0).max(2000).optional() };
   const image = z.object({ characterName: z.string().max(128).optional(), characterIndex: z.number().int().min(0).max(7).optional(),

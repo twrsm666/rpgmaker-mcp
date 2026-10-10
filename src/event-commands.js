@@ -313,7 +313,7 @@ export function battleCommands({ type = "direct", troopId, variableId, canEscape
 // Transfer Player: [designation(0 direct), mapId, x, y, direction(0 retain), fadeType(0 black/1 white/2 none)].
 export function transferPlayerCommands({ mapId, x, y, direction = 0, fade = 0 }) {
   int(mapId, "mapId", 1, 999);
-  int(x, "x", 0, 255); int(y, "y", 0, 255);
+  int(x, "x", 0); int(y, "y", 0);
   if (![0, 2, 4, 6, 8].includes(direction)) throw new Error("direction must be 0 (retain), 2, 4, 6 or 8");
   int(fade, "fade", 0, 2);
   return [{ code: 201, indent: 0, parameters: [0, mapId, x, y, direction, fade] }];
@@ -501,7 +501,7 @@ export function showAnimationCommands({ targetId = 0, animationId, wait = false 
 // Variable designation and swapping with another event need event_raw_commands.
 export function setEventLocationCommands({ targetId = 0, x, y, direction = 0 }) {
   int(targetId, "targetId", 0, 9999);
-  int(x, "x", 0, 255); int(y, "y", 0, 255);
+  int(x, "x", 0); int(y, "y", 0);
   if (![0, 2, 4, 6, 8].includes(direction)) throw new Error("direction must be 0 (retain), 2, 4, 6 or 8");
   return [{ code: 203, indent: 0, parameters: [targetId, 0, x, y, direction] }];
 }
@@ -771,7 +771,7 @@ export function registerEventTools({ project, register, afterEdit }) {
   }, args => playAudioCommands(args));
 
   eventTool("event_transfer_player", "Append Transfer Player (MZ code 201): move the party to a map coordinate. direction 0 retains facing, fade 0 black / 1 white / 2 none. Variable-based destinations need event_raw_commands.", {
-    toMapId: z.number().int().min(1).max(999), x: z.number().int().min(0).max(255), y: z.number().int().min(0).max(255),
+    toMapId: z.number().int().min(1).max(999), x: z.number().int().min(0), y: z.number().int().min(0),
     direction: z.union([z.literal(0), z.literal(2), z.literal(4), z.literal(6), z.literal(8)]).default(0),
     fade: z.number().int().min(0).max(2).default(0)
   }, async args => {
@@ -933,7 +933,7 @@ export function registerEventTools({ project, register, afterEdit }) {
   });
 
   eventTool("event_set_event_location", "Append Set Event Location (MZ code 203): instantly place this event (0) or another event at a coordinate; direction 0 retains facing. Variable designation and event swapping need event_raw_commands.", {
-    targetId: z.number().int().min(0).max(9999).default(0), x: z.number().int().min(0).max(255), y: z.number().int().min(0).max(255),
+    targetId: z.number().int().min(0).max(9999).default(0), x: z.number().int().min(0), y: z.number().int().min(0),
     direction: z.union([z.literal(0), z.literal(2), z.literal(4), z.literal(6), z.literal(8)]).default(0)
   }, args => setEventLocationCommands(args));
 
